@@ -1,0 +1,67 @@
+#!/bin/sh
+# Bluetooth picker for waybar, rendered through fuzzel.
+# Pick a device to connect it; pick a connected device to disconnect.
+
+bt() { bluetoothctl "$@" 2>/dev/null | sed 's/\x1b\[[0-9;]*[mK]//g; s/\r//g'; }
+
+notify() {
+    command -v notify-send >/dev/null 2>&1 && notify-send -a Bluetooth "$1" "$2"
+}
+
+if [ "$(bt show | awk '/Powered:/ {print $2; exit}')" != "yes" ]; then
+    chosen=$(printf '[ Turn Bluetooth on ]\n' | fuzzel --dmenu --lines 1 --prompt "Bluetooth  ")
+    [ -z "$chosen" ] && exit 0
+    bt power on >/dev/null
+    exit 0
+fi
+
+# Short discovery pass in the background so unpaired devices land in the cache.
+bt --timeout 8 scan on >/dev/null 2>&1 &
+
+list=$(bt devices | while read -r kw mac name; do
+    [ "$kw" = "Device" ] || continue
+    [ -z "$name" ] && name="$mac"
+    case "$(bt info "$mac")" in
+        *"Connected: yes"*) printf '0\t> connected  %s | %s\n' "$name" "$mac" ;;
+        *"Paired: yes"*)    printf '1\t  paired     %s | %s\n' "$name" "$mac" ;;
+        *)                  printf '2\t  new        %s | %s\n' "$name" "$mac" ;;
+    esac
+done | sort -n | cut -f2-)
+
+list="$list
+[ Rescan ]
+[ Turn Bluetooth off ]"
+
+chosen=$(printf '%s\n' "$list" | fuzzel --dmenu --prompt "Bluetooth  ")
+[ -z "$chosen" ] && exit 0
+
+case "$chosen" in
+    "[ Rescan ]")             sleep 6; exec "$0" ;;
+    "[ Turn Bluetooth off ]") bt power off >/dev/null; exit 0 ;;
+esac
+
+mac=${chosen##*| }
+case "$mac" in *:*:*:*:*:*) ;; *) exit 0 ;; esac
+
+if bt info "$mac" | grep -q "Connected: yes"; then
+    bt disconnect "$mac" >/dev/null
+    notify "Bluetooth" "Disconnected"
+    exit 0
+fi
+
+# Unknown device: pair and trust first so it reconnects on its own next time.
+if ! bt info "$mac" | grep -q "Paired: yes"; then
+    bt pair "$mac" >/dev/null
+    if ! bt info "$mac" | grep -q "Paired: yes"; then
+        notify "Bluetooth" "Pairing failed"
+        exit 1
+    fi
+    bt trust "$mac" >/dev/null
+fi
+
+bt connect "$mac" >/dev/null
+if bt info "$mac" | grep -q "Connected: yes"; then
+    notify "Bluetooth" "Connected"
+else
+    notify "Bluetooth" "Connection failed"
+fi

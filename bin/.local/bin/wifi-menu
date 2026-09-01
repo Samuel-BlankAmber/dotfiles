@@ -1,0 +1,39 @@
+#!/bin/sh
+# Wi-Fi picker for waybar, rendered through fuzzel.
+
+nmcli device wifi rescan >/dev/null 2>&1
+
+list=$(nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list 2>/dev/null | awk -F: '
+  {
+    ssid = $4
+    for (i = 5; i <= NF; i++) ssid = ssid ":" $i
+    gsub(/\\:/, ":", ssid)
+    if (ssid == "") next
+    sig = $2 + 0
+    # keep only the strongest sighting of each network
+    if (!(ssid in best) || sig > best[ssid]) {
+      best[ssid] = sig
+      sec[ssid]  = ($3 == "") ? "open" : "lock"
+    }
+    if ($1 == "*") active[ssid] = 1
+  }
+  END {
+    for (s in best) printf "%d\t%s%s %s | %s\n", best[s], \
+      (s in active ? "> " : "  "), \
+      (best[s] >= 70 ? "***" : best[s] >= 40 ? "** " : "*  "), \
+      sec[s], s
+  }' | sort -rn | cut -f2-)
+
+[ -z "$list" ] && exit 0
+
+chosen=$(printf '%s\n' "$list" | fuzzel --dmenu --prompt "Wi-Fi  ")
+[ -z "$chosen" ] && exit 0
+
+ssid=${chosen#*| }
+[ -z "$ssid" ] && exit 0
+
+nmcli device wifi connect "$ssid" >/dev/null 2>&1 && exit 0
+
+pass=$(: | fuzzel --dmenu --password --lines 0 --prompt "Password for $ssid  ")
+[ -z "$pass" ] && exit 0
+nmcli device wifi connect "$ssid" password "$pass" >/dev/null 2>&1

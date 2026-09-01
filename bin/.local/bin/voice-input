@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Toggle voice dictation. Press once to record, again to transcribe and type
+# into whatever window currently has focus.
+#
+# Transcription is local (faster-whisper, CPU int8). Typing uses wtype, which
+# drives Wayland's virtual-keyboard protocol, so it works in any client:
+# foot, tmux, Firefox, editors.
+
+set -euo pipefail
+
+MODEL="small.en"          # tiny.en / base.en / small.en / medium.en
+PYTHON="$HOME/.local/share/voice-input/venv/bin/python"
+
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}/voice-input-$UID"
+PID_FILE="$STATE_DIR/recording.pid"
+BUSY_FILE="$STATE_DIR/transcribing.lock"
+NOTIF_FILE="$STATE_DIR/notification.id"
+AUDIO_FILE="$STATE_DIR/recording.wav"
+
+mkdir -p "$STATE_DIR"
+
+# Each notification replaces the previous one rather than stacking.
+notify() {  # urgency timeout summary [body]
+    local id
+    id=$(notify-send -a "Voice Input" -p -u "$1" -t "$2" \
+         -h string:x-canonical-private-synchronous:voice-input \
+         "$3" "${4:-}" 2>/dev/null) || return 0
+    echo "$id" > "$NOTIF_FILE"
+}
+
+# Dismiss only our own notification, never anyone else's.
+dismiss() {
+    [[ -f "$NOTIF_FILE" ]] || return 0
+    makoctl dismiss -n "$(cat "$NOTIF_FILE")" >/dev/null 2>&1 || true
+    rm -f "$NOTIF_FILE"
+}
+
+die() { dismiss; notify normal 4000 "Voice Input" "$1"; exit 1; }
+
+# --------------------------------------------------------------------
+# Busy: a transcription is already in flight. Ignore the press rather
+# than starting a second recording on top of it.
+# --------------------------------------------------------------------
+if [[ -f "$BUSY_FILE" ]]; then
+    notify normal 2000 "Still transcribing..."
+    exit 0
+fi
+
+# --------------------------------------------------------------------
+# Second press: stop recording, transcribe, type.
+# --------------------------------------------------------------------
+if [[ -f "$PID_FILE" ]]; then
+    PID="$(cat "$PID_FILE")"
+    rm -f "$PID_FILE"
+
+    if kill -0 "$PID" 2>/dev/null; then
+        kill -INT "$PID" 2>/dev/null || true
+        # Let pw-record finalise the WAV header before we read it.
+        for _ in {1..50}; do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.05
+        done
+    fi
+
+    [[ -s "$AUDIO_FILE" ]] || die "No audio recorded"
+    # A bare WAV header is 44 bytes; anything near that captured no samples.
+    (( $(stat -c %s "$AUDIO_FILE") > 4096 )) || die "Recording too short"
+
+    touch "$BUSY_FILE"
+    trap 'rm -f "$BUSY_FILE"' EXIT
+
+    dismiss
+    notify normal 0 "Transcribing..."
+
+    TEXT="$("$PYTHON" - "$AUDIO_FILE" "$MODEL" <<'PY'
+import sys
+from faster_whisper import WhisperModel
+
+audio, model_name = sys.argv[1], sys.argv[2]
+model = WhisperModel(model_name, device="cpu", compute_type="int8")
+segments, _ = model.transcribe(audio, beam_size=5, vad_filter=True)
+print(" ".join(s.text.strip() for s in segments).strip())
+PY
+)" || die "Transcription failed"
+
+    rm -f "$AUDIO_FILE"
+    dismiss
+
+    [[ -n "$TEXT" ]] || { notify normal 3000 "No speech detected"; exit 0; }
+
+    printf '%s ' "$TEXT" | wtype -
+    exit 0
+fi
+
+# --------------------------------------------------------------------
+# First press: start recording.
+# --------------------------------------------------------------------
+rm -f "$AUDIO_FILE"
+
+pw-record --rate=16000 --channels=1 "$AUDIO_FILE" &
+PID=$!
+
+# Give it a moment to fail loudly (no mic, busy device) rather than
+# leaving a dead pid file behind that the next press would trip over.
+sleep 0.3
+kill -0 "$PID" 2>/dev/null || die "Could not start recording"
+
+echo "$PID" > "$PID_FILE"
+notify normal 0 "Recording..." "Press the shortcut again to transcribe."

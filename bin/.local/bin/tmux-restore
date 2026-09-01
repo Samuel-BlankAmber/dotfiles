@@ -1,0 +1,8 @@
+#!/bin/sh
+
+tmux has-session 2>/dev/null && exit 0
+
+tmux new-session -d -s __restore__
+tmux run-shell "$HOME/.config/tmux/plugins/tmux-resurrect/scripts/restore.sh"
+tmux kill-session -t __restore__ 2>/dev/null || true
+

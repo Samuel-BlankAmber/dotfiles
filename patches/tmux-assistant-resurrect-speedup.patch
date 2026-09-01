@@ -1,0 +1,36 @@
+--- restore-assistant-sessions.sh.orig	2026-08-26 12:29:23.683873599 +0100
++++ restore-assistant-sessions.sh	2026-08-26 13:19:33.623671297 +0100
+@@ -44,7 +44,7 @@
+ fi
+ 
+ # Wait for panes to be fully initialized after resurrect restore
+-sleep 2
++sleep 0.5
+ 
+ log "restoring $count assistant session(s)..."
+ 
+@@ -94,12 +94,12 @@
+ 	# kitty/wezterm/etc auto-attaches via `tmux new-session -A`, the wait
+ 	# resolves in < 200ms.
+ 	client_wait=0
+-	while [ "$(tmux list-clients -t "$tmux_session" 2>/dev/null | wc -l)" -eq 0 ] && [ $client_wait -lt 50 ]; do
++	while [ "$(tmux list-clients -t "$tmux_session" 2>/dev/null | wc -l)" -eq 0 ] && [ $client_wait -lt 5 ]; do
+ 		sleep 0.1
+ 		client_wait=$((client_wait + 1))
+ 	done
+-	if [ $client_wait -ge 50 ]; then
+-		log "no client attached to session '$tmux_session' after 5s; replaying anyway (TUI startup queries may miss responses)"
++	if [ $client_wait -ge 5 ]; then
++		log "no client attached to session '$tmux_session' after 0.5s; replaying anyway (TUI startup queries may miss responses)"
+ 	fi
+ 
+ 	# Guard 1: skip if the pane is not running a shell.
+@@ -271,7 +271,7 @@
+ 	restored=$((restored + 1))
+ 
+ 	# Stagger launches to avoid overwhelming the system
+-	sleep 1
++	sleep 0.2
+ done <"$tmpfile"
+ 
+ rm -f "$tmpfile"

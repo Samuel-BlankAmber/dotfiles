@@ -1,0 +1,8 @@
+*.bak
+*.bak[0-9]
+*.orig
+*.rej
+
+**/venv/
+**/__pycache__/
+**/.cache/

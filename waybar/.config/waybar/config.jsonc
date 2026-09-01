@@ -1,0 +1,110 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 36,
+    "modules-left": [
+        "sway/workspaces",
+        "sway/window",
+        "sway/mode"
+    ],
+    "modules-center": [
+        "clock"
+    ],
+    "modules-right": [
+        "network",
+        "bluetooth",
+        "pulseaudio",
+        "backlight",
+        "memory",
+        "cpu",
+        "battery",
+        "tray"
+    ],
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name} {windows}",
+        "format-window-separator": " ",
+        "window-rewrite-default": "<span color='#565f89'></span>",
+        "window-rewrite": {
+            "class<foot>": "<span color='#9ece6a'></span>",
+            "class<code>": "<span color='#7aa2f7'></span>",
+            "class<discord>": "<span color='#bb9af7'>󰙯</span>",
+            "class<firefox.*>": "<span color='#ff9e64'></span>",
+            "class<google-chrome.*>": "<span color='#e0af68'></span>",
+            "class<Chromium.*>": "<span color='#e0af68'></span>"
+        }
+    },
+    "sway/window": {
+        "max-length": 50
+    },
+    "sway/mode": {
+        "format": "  {}"
+    },
+    "clock": {
+        "format": "  {:%a %d %b  %H:%M}",
+        "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    "network": {
+        "format-wifi": "  {essid}",
+        "format-ethernet": "  Wired",
+        "format-disconnected": "  Offline",
+        "tooltip-format": "{ifname}\n{ipaddr}/{cidr}\nSignal: {signalStrength}%",
+        "on-click": "/home/sam/.local/bin/wifi-menu",
+        "on-click-right": "nm-connection-editor"
+    },
+    "bluetooth": {
+        "format": "  {status}",
+        "format-off": "  off",
+        "format-on": "  on",
+        "format-connected": "  {device_alias}",
+        "format-connected-battery": "  {device_alias} {device_battery_percentage}%",
+        "tooltip-format": "{controller_alias}\nBluetooth {status}",
+        "tooltip-format-connected": "{controller_alias}\n{num_connections} connected\n{device_enumerate}",
+        "tooltip-format-enumerate-connected": "{device_alias}\t{device_address}",
+        "tooltip-format-enumerate-connected-battery": "{device_alias}\t{device_address}\t{device_battery_percentage}%",
+        "on-click": "/home/sam/.local/bin/bt-menu",
+        "on-click-right": "blueman-manager"
+    },
+    "pulseaudio": {
+        "format": "{icon}  {volume}%",
+        "format-muted": "  muted",
+        "format-icons": {
+            "default": [
+                "",
+                "",
+                ""
+            ]
+        },
+        "scroll-step": 5
+    },
+    "backlight": {
+        "format": "  {percent}%",
+        "tooltip": false
+    },
+    "memory": {
+        "format": "  {percentage}%"
+    },
+    "cpu": {
+        "format": "  {usage}%"
+    },
+    "battery": {
+        "format": "{icon}  {capacity}%",
+        "format-charging": "  {capacity}%",
+        "format-full": "  full",
+        "format-icons": [
+            "",
+            "",
+            "",
+            "",
+            ""
+        ],
+        "states": {
+            "warning": 30,
+            "critical": 15
+        }
+    },
+    "tray": {
+        "spacing": 8
+    }
+}

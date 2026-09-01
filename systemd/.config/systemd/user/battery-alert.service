@@ -1,0 +1,8 @@
+[Unit]
+Description=Low battery alert
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/sam/.local/bin/battery-alert

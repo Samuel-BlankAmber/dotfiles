@@ -1,0 +1,51 @@
+#!/bin/sh
+# Low-battery alert, driven by a systemd user timer.
+# 15% -> ordinary warning, once.  5% -> critical popup that will not go away,
+# plus a swaynag bar across every output.
+
+BAT=/sys/class/power_supply/BAT1
+STAMP="${XDG_RUNTIME_DIR:-/tmp}/battery-alert.stage"
+
+[ -r "$BAT/capacity" ] || exit 0
+cap=$(cat "$BAT/capacity")
+status=$(cat "$BAT/status")
+
+# Plugged back in: clear the stamp and dismiss anything still on screen.
+if [ "$status" != "Discharging" ]; then
+    if [ -f "$STAMP" ]; then
+        rm -f "$STAMP"
+        makoctl dismiss -g 2>/dev/null
+        pkill -f "swaynag -t error" 2>/dev/null
+    fi
+    exit 0
+fi
+
+stage=$(cat "$STAMP" 2>/dev/null || echo none)
+
+# Replace the previous battery popup instead of stacking a new one each minute.
+sync_hint="string:x-canonical-private-synchronous:battery"
+
+if [ "$cap" -le 5 ]; then
+    notify-send -u critical -a Battery \
+        -h "$sync_hint" \
+        "Battery critically low: $cap%" \
+        "Plug in now."
+    # swaynag spans the full width of every output; hard to miss in a fullscreen window.
+    if [ "$stage" != "critical" ]; then
+        pkill -f "swaynag -t error" 2>/dev/null
+        swaynag -t error \
+            -m "  Battery at ${cap}%. Plug in now." \
+            -B "Dismiss" "true" >/dev/null 2>&1 &
+        echo critical > "$STAMP"
+    fi
+elif [ "$cap" -le 15 ]; then
+    if [ "$stage" != "low" ] && [ "$stage" != "critical" ]; then
+        notify-send -u normal -a Battery \
+            -h "$sync_hint" \
+            "Battery low: $cap%" \
+            "Consider plugging in."
+        echo low > "$STAMP"
+    fi
+else
+    [ "$stage" = none ] || rm -f "$STAMP"
+fi

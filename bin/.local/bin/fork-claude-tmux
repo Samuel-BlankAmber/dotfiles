@@ -1,0 +1,80 @@
+#!/bin/sh
+# Fork the Claude session running in one tmux session into a brand new one.
+#
+#   fork-claude-tmux [-d] <old-session> <new-session> [cwd]
+#
+# The source conversation is left untouched; the fork continues from its
+# context under a fresh session id. Looks the source up in Claude's own
+# session registry (~/.claude/sessions/<pid>.json), which records the tmux
+# session each running Claude belongs to.
+#
+#   -d   leave the new session detached instead of switching to it
+
+set -e
+
+detach=0
+[ "$1" = "-d" ] && { detach=1; shift; }
+
+old=$1
+new=$2
+cwd=$3
+
+if [ -z "$old" ] || [ -z "$new" ]; then
+    echo "usage: fork-claude-tmux [-d] <old-session> <new-session> [cwd]" >&2
+    exit 2
+fi
+
+tmux has-session -t "=$old" 2>/dev/null || {
+    echo "fork-claude-tmux: no tmux session named '$old'" >&2; exit 1; }
+
+tmux has-session -t "=$new" 2>/dev/null && {
+    echo "fork-claude-tmux: tmux session '$new' already exists" >&2; exit 1; }
+
+# Registry lookup: the running Claude that claims this tmux session.
+found=$(python3 - "$old" <<'PY'
+import json, glob, os, sys
+want = sys.argv[1]
+for f in glob.glob(os.path.expanduser("~/.claude/sessions/*.json")):
+    try:
+        d = json.load(open(f))
+    except Exception:
+        continue
+    tmux = d.get("tmux") or ""
+    if tmux.split(":")[0] != want:
+        continue
+    pid = d.get("pid")
+    if not pid or not os.path.isdir(f"/proc/{pid}"):
+        continue          # registry entry outlived the process
+    sid = d.get("sessionId")
+    if sid:
+        print(sid, d.get("cwd", ""))
+        break
+PY
+)
+
+[ -n "$found" ] || {
+    echo "fork-claude-tmux: no running Claude registered for tmux session '$old'" >&2
+    exit 1; }
+
+id=${found%% *}
+[ -n "$cwd" ] || cwd=${found#* }
+
+# tmux silently falls back to its default dir if -c does not exist, which
+# would drop the fork somewhere unexpected (and behind a trust prompt).
+[ -d "$cwd" ] || {
+    echo "fork-claude-tmux: '$cwd' does not exist; pass a directory as the third argument" >&2
+    exit 1; }
+
+echo "forking $old ($id)"
+echo "     -> $new  in $cwd"
+
+tmux new-session -d -s "$new" -c "$cwd" \
+    claude --resume "$id" --fork-session --name "$new"
+
+if [ "$detach" -eq 1 ]; then
+    echo "detached. attach with: tmux attach -t $new"
+elif [ -n "$TMUX" ]; then
+    tmux switch-client -t "$new"
+else
+    tmux attach -t "$new"
+fi

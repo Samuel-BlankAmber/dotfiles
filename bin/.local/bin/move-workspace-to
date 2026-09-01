@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Move the focused sway workspace to position N, shifting the rest along.
+
+Unlike a swap, this reinserts: sending workspace 8 to position 1 makes it
+leftmost and pushes 1-7 one place to the right, rather than exchanging two.
+
+Sway has no workspace ordering property; order comes from the numeric name.
+So reordering means renaming, done in two phases through temporary names
+because sway refuses a rename onto a name that already exists.
+"""
+import json
+import subprocess
+import sys
+
+
+def swaymsg(*args):
+    return subprocess.run(["swaymsg", *args],
+                          capture_output=True, text=True).stdout
+
+
+def workspaces():
+    return json.loads(swaymsg("-t", "get_workspaces", "-r"))
+
+
+def main():
+    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
+        sys.exit("usage: move-workspace-to <position>")
+
+    ws = workspaces()
+    focused = next((w for w in ws if w["focused"]), None)
+    if focused is None:
+        sys.exit("no focused workspace")
+    if not focused["name"].isdigit():
+        sys.exit(f"focused workspace {focused['name']!r} is not numbered")
+
+    numbered = sorted(int(w["name"]) for w in ws if w["name"].isdigit())
+    current = int(focused["name"])
+    # Clamp, so "move to 9" with only 7 workspaces means "move to the end".
+    target = max(1, min(int(sys.argv[1]), max(numbered)))
+    if target == current:
+        return
+
+    if target < current:                      # moving left: others shift right
+        moves = {n: n + 1 for n in numbered if target <= n < current}
+    else:                                     # moving right: others shift left
+        moves = {n: n - 1 for n in numbered if current < n <= target}
+    moves[current] = target
+
+    # Phase 1: park everything on a unique temporary name.
+    for old, new in moves.items():
+        swaymsg("rename", "workspace", str(old), "to", f"__mv{new}__")
+    # Phase 2: settle onto the final names.
+    for new in moves.values():
+        swaymsg("rename", "workspace", f"__mv{new}__", "to", str(new))
+
+
+main()

@@ -1,0 +1,16 @@
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[init]
+	defaultBranch = main
+[user]
+	email = 145449058+Samuel-BlankAmber@users.noreply.github.com
+	name = BlankAmber
+	signingkey = FFA7136E9BD53FB4
+[commit]
+	gpgsign = true
+[gpg]
+	program = gpg
