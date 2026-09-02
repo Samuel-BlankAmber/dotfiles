@@ -98,6 +98,6 @@ window#waybar {
     color: #1a1b26;
     font-weight: bold;
     padding: 0 10px;
-    margin: 3px;
+    margin: 3px 3px 3px 12px;
     border-radius: 4px;
 }
