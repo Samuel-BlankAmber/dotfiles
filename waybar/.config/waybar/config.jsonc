@@ -89,6 +89,7 @@
         "format": "  {usage}%"
     },
     "battery": {
+        "interval": 1,
         "format": "{icon}  {capacity}%",
         "format-charging": "  {capacity}%",
         "format-full": "  full",
